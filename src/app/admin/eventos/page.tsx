@@ -37,22 +37,12 @@ export default function EventosPage() {
 
   const loadEventos = async () => {
     try {
-      const { data, error } = await supabase
-        .from('v_evento_balance')
-        .select(`
-          *,
-          eventos!inner(
-            id,
-            fecha,
-            lugar,
-            cliente,
-            total,
-            anticipo_recibido,
-            contrato_firmado,
-            estado,
-            creado_por
-          )
-        `)
+      console.log('Cargando eventos...') // Debug
+      
+      // Query directo a la tabla eventos sin usar vista
+      const { data: eventosData, error } = await supabase
+        .from('eventos')
+        .select('*')
         .order('fecha', { ascending: false })
 
       if (error) {
@@ -60,23 +50,82 @@ export default function EventosPage() {
         return
       }
 
-      // Combinar datos del balance con datos del evento
-      const eventosConBalance = data?.map(balance => ({
-        id: balance.id,
-        fecha: balance.fecha,
-        lugar: balance.lugar,
-        cliente: balance.eventos.cliente,
-        total: balance.total,
-        anticipo_recibido: balance.eventos.anticipo_recibido,
-        contrato_firmado: balance.eventos.contrato_firmado,
-        estado: balance.eventos.estado,
-        gastos_totales: balance.gastos_totales || 0,
-        ahorro_aportado: balance.ahorro_aportado || 0,
-        ingresos_extras: balance.ingresos_extras || 0,
-        neto_evento: balance.neto_evento || 0,
-        creado_por: balance.eventos.creado_por
-      })) || []
+      console.log('Eventos encontrados:', eventosData?.length || 0) // Debug
 
+      if (!eventosData || eventosData.length === 0) {
+        setEventos([])
+        return
+      }
+
+      // Para cada evento, calcular los balances manualmente
+      const eventosConBalance = await Promise.all(
+        eventosData.map(async (evento) => {
+          try {
+            // Obtener gastos
+            const { data: gastos } = await supabase
+              .from('gastos')
+              .select('monto')
+              .eq('evento_id', evento.id)
+
+            // Obtener ingresos extras
+            const { data: ingresos } = await supabase
+              .from('ingresos_extras')
+              .select('monto')
+              .eq('evento_id', evento.id)
+
+            // Obtener ahorro
+            const { data: ahorro } = await supabase
+              .from('ahorro_ledger')
+              .select('monto, tipo')
+              .eq('evento_id', evento.id)
+
+            // Calcular totales
+            const gastos_totales = gastos?.reduce((sum, g) => sum + Number(g.monto), 0) || 0
+            const ingresos_extras = ingresos?.reduce((sum, i) => sum + Number(i.monto), 0) || 0
+            const ahorro_aportado = ahorro?.reduce((sum, a) => {
+              return sum + (a.tipo === 'aporte' ? Number(a.monto) : -Number(a.monto))
+            }, 0) || 0
+
+            const neto_evento = Number(evento.total) + ingresos_extras - gastos_totales - ahorro_aportado
+
+            return {
+              id: evento.id,
+              fecha: evento.fecha,
+              lugar: evento.lugar,
+              cliente: evento.cliente || '',
+              total: Number(evento.total),
+              anticipo_recibido: Number(evento.anticipo_recibido),
+              contrato_firmado: evento.contrato_firmado,
+              estado: evento.estado,
+              gastos_totales,
+              ahorro_aportado,
+              ingresos_extras,
+              neto_evento,
+              creado_por: evento.creado_por
+            }
+          } catch (err) {
+            console.error('Error procesando evento:', evento.id, err)
+            // Devolver evento con valores por defecto si falla
+            return {
+              id: evento.id,
+              fecha: evento.fecha,
+              lugar: evento.lugar,
+              cliente: evento.cliente || '',
+              total: Number(evento.total),
+              anticipo_recibido: Number(evento.anticipo_recibido),
+              contrato_firmado: evento.contrato_firmado,
+              estado: evento.estado,
+              gastos_totales: 0,
+              ahorro_aportado: 0,
+              ingresos_extras: 0,
+              neto_evento: Number(evento.total),
+              creado_por: evento.creado_por
+            }
+          }
+        })
+      )
+
+      console.log('Eventos procesados:', eventosConBalance.length) // Debug
       setEventos(eventosConBalance)
     } catch (error) {
       console.error('Error loading eventos:', error)
