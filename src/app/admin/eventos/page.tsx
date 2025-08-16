@@ -3,7 +3,8 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
-import { FaPlus, FaEdit, FaEye, FaTrash, FaCalendarAlt, FaMapMarkerAlt, FaDollarSign, FaCheckCircle, FaClock, FaTimes, FaFilter } from 'react-icons/fa'
+import { FaPlus, FaEdit, FaEye, FaTrash, FaCalendarAlt, FaMapMarkerAlt, FaCheckCircle, FaClock, FaTimes } from 'react-icons/fa'
+
 
 interface EventoConBalance {
   id: string

@@ -1,12 +1,11 @@
 'use client'
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { 
-  FaUsers, FaUserPlus, FaUserShield, FaUserCheck, FaUserTimes, 
-  FaUserEdit, FaEye, FaCrown, FaExclamationTriangle, FaCheckCircle, 
-  FaTimes, FaEnvelope, FaClock, FaFilter, FaSearch, FaSort,
-  FaUserCog, FaBan, FaPlay, FaPause
+  FaUsers, FaUserCheck, FaUserEdit, FaEye, FaCrown, 
+  FaExclamationTriangle, FaCheckCircle, FaTimes, FaEnvelope, 
+  FaClock, FaSearch, FaBan, FaPlay, FaPause
 } from 'react-icons/fa'
 
 interface Usuario {
@@ -19,29 +18,35 @@ interface Usuario {
   email?: string
 }
 
-export default function UsuariosPage() {
+interface EditForm {
+  nombre: string;
+  rol: 'admin' | 'miembro' | 'visor';
+  estado: 'pendiente' | 'activo' | 'suspendido';
+}
+
+export default function UsuariosPage(): React.JSX.Element {
   const { miembro } = useAuth()
   
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [filteredUsuarios, setFilteredUsuarios] = useState<Usuario[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
 
   // Estados para filtros y búsqueda
   const [searchTerm, setSearchTerm] = useState('')
-  const [filterRol, setFilterRol] = useState<string>('todos')
-  const [filterEstado, setFilterEstado] = useState<string>('todos')
+  const [filterRol, setFilterRol] = useState<'admin' | 'miembro' | 'visor' | 'todos'>('todos')
+  const [filterEstado, setFilterEstado] = useState<'pendiente' | 'activo' | 'suspendido' | 'todos'>('todos')
   const [sortBy, setSortBy] = useState<'nombre' | 'creado_en' | 'rol' | 'estado'>('creado_en')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
   // Estados para modals
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingUsuario, setEditingUsuario] = useState<Usuario | null>(null)
-  const [editForm, setEditForm] = useState({
+  const [editForm, setEditForm] = useState<EditForm>({
     nombre: '',
-    rol: 'miembro' as 'admin' | 'miembro' | 'visor',
-    estado: 'activo' as 'pendiente' | 'activo' | 'suspendido'
+    rol: 'miembro',
+    estado: 'activo'
   })
 
   useEffect(() => {
@@ -52,7 +57,7 @@ export default function UsuariosPage() {
 
   useEffect(() => {
     // Aplicar filtros y búsqueda
-    let filtered = usuarios.filter(usuario => {
+    const filtered = usuarios.filter(usuario => {
       const matchesSearch = usuario.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            (usuario.email?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)
       
@@ -64,7 +69,7 @@ export default function UsuariosPage() {
 
     // Aplicar ordenamiento
     filtered.sort((a, b) => {
-      let aValue: any, bValue: any
+      let aValue: string | Date, bValue: string | Date
       
       switch (sortBy) {
         case 'nombre':
@@ -184,7 +189,7 @@ export default function UsuariosPage() {
 
   const handleQuickAction = async (usuarioId: string, action: 'activar' | 'suspender' | 'hacer_admin' | 'hacer_miembro') => {
     try {
-      let updateData: any = {}
+      let updateData: Partial<Usuario> = {}
       
       switch (action) {
         case 'activar':
@@ -327,7 +332,7 @@ export default function UsuariosPage() {
         <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg flex items-center">
           <FaExclamationTriangle className="mr-2 flex-shrink-0" />
           <span>{error}</span>
-          <button onClick={() => setError('')} className="ml-auto">
+          <button onClick={() => setError(null)} className="ml-auto">
             <FaTimes />
           </button>
         </div>
@@ -337,7 +342,7 @@ export default function UsuariosPage() {
         <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg flex items-center">
           <FaCheckCircle className="mr-2 flex-shrink-0" />
           <span>{success}</span>
-          <button onClick={() => setSuccess('')} className="ml-auto">
+          <button onClick={() => setSuccess(null)} className="ml-auto">
             <FaTimes />
           </button>
         </div>
@@ -364,7 +369,7 @@ export default function UsuariosPage() {
           <div>
             <select
               value={filterRol}
-              onChange={(e) => setFilterRol(e.target.value)}
+              onChange={(e) => setFilterRol(e.target.value as 'admin' | 'miembro' | 'visor' | 'todos')}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
             >
               <option value="todos">Todos los roles</option>
@@ -378,7 +383,7 @@ export default function UsuariosPage() {
           <div>
             <select
               value={filterEstado}
-              onChange={(e) => setFilterEstado(e.target.value)}
+              onChange={(e) => setFilterEstado(e.target.value as 'pendiente' | 'activo' | 'suspendido' | 'todos')}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
             >
               <option value="todos">Todos los estados</option>
@@ -394,8 +399,8 @@ export default function UsuariosPage() {
               value={`${sortBy}-${sortOrder}`}
               onChange={(e) => {
                 const [field, order] = e.target.value.split('-')
-                setSortBy(field as any)
-                setSortOrder(order as any)
+                setSortBy(field as 'nombre' | 'creado_en' | 'rol' | 'estado')
+                setSortOrder(order as 'asc' | 'desc')
               }}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
             >
@@ -529,7 +534,7 @@ export default function UsuariosPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">Rol</label>
                 <select
                   value={editForm.rol}
-                  onChange={(e) => setEditForm({...editForm, rol: e.target.value as any})}
+                  onChange={(e) => setEditForm({...editForm, rol: e.target.value as 'admin' | 'miembro' | 'visor'})}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
                   required
                 >
@@ -543,7 +548,7 @@ export default function UsuariosPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">Estado</label>
                 <select
                   value={editForm.estado}
-                  onChange={(e) => setEditForm({...editForm, estado: e.target.value as any})}
+                  onChange={(e) => setEditForm({...editForm, estado: e.target.value as 'pendiente' | 'activo' | 'suspendido'})}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
                   required
                 >

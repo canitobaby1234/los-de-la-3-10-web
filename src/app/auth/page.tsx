@@ -75,7 +75,8 @@ export default function LoginPage() {
         setShowRegister(false)
         setRegisterData({ email: '', password: '', confirmPassword: '', nombre: '' })
       }
-    } catch (error: any) {
+    } catch (err) {
+      console.error('Error al registrar usuario:', err)
       setError('Error al registrar usuario')
     }
     
@@ -404,4 +405,3 @@ export default function LoginPage() {
     </div>
   )
 }
-

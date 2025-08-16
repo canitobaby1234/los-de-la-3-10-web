@@ -117,7 +117,8 @@ export default function NuevoEventoPage() {
     }
   }
 
-  const handleInputChange = (field: string, value: any) => {
+  // ✅ CORREGIDO: Cambié 'any' por tipos específicos
+  const handleInputChange = (field: string, value: string | boolean) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -371,11 +372,13 @@ export default function NuevoEventoPage() {
               </div>
               <div className="flex items-start">
                 <div className="w-2 h-2 bg-amber-500 rounded-full mt-2 mr-3 flex-shrink-0"></div>
+                {/* ✅ CORREGIDO: Escapé las comillas */}
                 <p><strong>Anticipo &lt; 40%:</strong> Se puede agendar sin contrato si todos están de acuerdo</p>
               </div>
               <div className="flex items-start">
                 <div className="w-2 h-2 bg-amber-500 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                <p><strong>Estado automático:</strong> Si el anticipo es ≥ 40%, el evento se marca como "Confirmado"</p>
+                {/* ✅ CORREGIDO: Escapé las comillas */}
+                <p><strong>Estado automático:</strong> Si el anticipo es ≥ 40%, el evento se marca como &ldquo;Confirmado&rdquo;</p>
               </div>
             </div>
           </div>

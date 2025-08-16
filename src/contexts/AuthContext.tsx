@@ -1,6 +1,6 @@
 'use client'
-import { createContext, useContext, useEffect, useState } from 'react'
-import { User, Session } from '@supabase/supabase-js'
+import { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { User, Session, AuthError } from '@supabase/supabase-js'
 import { supabase, type Miembro } from '@/lib/supabase'
 
 interface AuthContextType {
@@ -8,9 +8,9 @@ interface AuthContextType {
   session: Session | null
   miembro: Miembro | null
   loading: boolean
-  signIn: (email: string, password: string) => Promise<{ error: any }>
+  signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>
   signOut: () => Promise<void>
-  resetPassword: (email: string) => Promise<{ error: any }>
+  resetPassword: (email: string) => Promise<{ error: AuthError | null }>
   isAdmin: boolean
 }
 
@@ -23,6 +23,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   const isAdmin = miembro?.rol === 'admin' && miembro?.estado === 'activo'
+
+  const loadMiembro = useCallback(async () => {
+    if (!user) return
+
+    try {
+      const { data, error } = await supabase
+        .from('miembros')
+        .select('*')
+        .eq('user_id', user.id)
+        .single()
+
+      if (error) {
+        console.error('Error loading miembro:', error)
+      } else {
+        setMiembro(data)
+      }
+    } catch (error) {
+      console.error('Error loading miembro:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [user])
 
   useEffect(() => {
     // Obtener sesión inicial
@@ -51,29 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setMiembro(null)
       setLoading(false)
     }
-  }, [user])
-
-  const loadMiembro = async () => {
-    if (!user) return
-
-    try {
-      const { data, error } = await supabase
-        .from('miembros')
-        .select('*')
-        .eq('user_id', user.id)
-        .single()
-
-      if (error) {
-        console.error('Error loading miembro:', error)
-      } else {
-        setMiembro(data)
-      }
-    } catch (error) {
-      console.error('Error loading miembro:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  }, [user, loadMiembro])
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({

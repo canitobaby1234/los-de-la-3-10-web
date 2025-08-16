@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
-import { FaFacebook, FaInstagram, FaWhatsapp, FaMicrophone, FaMusic, FaStar, FaVolumeUp } from 'react-icons/fa'
+import { FaFacebook, FaInstagram, FaWhatsapp, FaMusic, FaStar, FaVolumeUp } from 'react-icons/fa'
 
 export default function HomePage() {
   return (

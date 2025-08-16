@@ -1,13 +1,12 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, JSX } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
-import Link from 'next/link'
 import { 
-  FaPlus, FaMinus, FaPiggyBank, FaMoneyBillWave, FaCalendarAlt, 
-  FaFileAlt, FaUser, FaArrowUp, FaArrowDown, FaAdjust, FaTrash, 
+  FaPlus, FaPiggyBank, FaCalendarAlt, 
+  FaUser, FaArrowUp, FaArrowDown, FaAdjust, FaTrash, 
   FaEdit, FaExclamationTriangle, FaCheckCircle, FaTimes, FaChartLine,
-  FaCoins, FaHandHoldingUsd, FaCreditCard, FaReceipt
+  FaCoins, FaReceipt
 } from 'react-icons/fa'
 
 interface MovimientoAhorro {
@@ -67,13 +66,8 @@ export default function AhorroPage() {
     fecha: new Date().toISOString().split('T')[0]
   })
 
-  useEffect(() => {
-    if (miembro?.estado === 'activo') {
-      loadAhorroData()
-    }
-  }, [miembro])
-
-  const loadAhorroData = async () => {
+  // ✅ CORREGIDO: Uso useCallback para evitar el warning de dependencias
+  const loadAhorroData = useCallback(async () => {
     try {
       // Cargar movimientos con relaciones
       const { data: movimientosData, error: movimientosError } = await supabase
@@ -103,7 +97,13 @@ export default function AhorroPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (miembro?.estado === 'activo') {
+      loadAhorroData()
+    }
+  }, [miembro, loadAhorroData])
 
   const calcularEstadisticas = (movimientos: MovimientoAhorro[]): EstadisticasAhorro => {
     const aportes = movimientos.filter(m => m.tipo === 'aporte')
@@ -169,8 +169,8 @@ export default function AhorroPage() {
       loadAhorroData()
 
     } catch (error) {
-      console.error('Error saving movimiento:', error)
-      setError('Error al guardar movimiento')
+      setError(`Error al ${editingMovimiento ? 'actualizar' : 'agregar'} movimiento`)
+      console.error(error)
     }
   }
 
@@ -189,19 +189,14 @@ export default function AhorroPage() {
     if (!confirm('¿Eliminar este movimiento de ahorro?')) return
 
     try {
-      const { error } = await supabase
+      await supabase
         .from('ahorro_ledger')
         .delete()
         .eq('id', movimientoId)
 
-      if (error) {
-        setError('Error al eliminar movimiento')
-        return
-      }
-
       setSuccess('Movimiento eliminado')
       loadAhorroData()
-    } catch (error) {
+    } catch{
       setError('Error al eliminar movimiento')
     }
   }
@@ -226,15 +221,6 @@ export default function AhorroPage() {
       style: 'currency',
       currency: 'MXN'
     }).format(amount)
-  }
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-MX', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
   }
 
   const getTipoIcon = (tipo: string) => {
@@ -336,7 +322,7 @@ export default function AhorroPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">Tipo</label>
                 <select
                   value={movimientoForm.tipo}
-                  onChange={(e) => setMovimientoForm({...movimientoForm, tipo: e.target.value as any})}
+                  onChange={(e) => setMovimientoForm({...movimientoForm, tipo: e.target.value as 'aporte' | 'retiro' | 'ajuste'})}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                   required
                 >
@@ -448,7 +434,13 @@ export default function AhorroPage() {
   )
 }
 
-function ResumenAhorroTab({ estadisticas, formatCurrency }: any) {
+// ✅ CORREGIDO: Definí interfaz para props
+interface ResumenAhorroTabProps {
+  estadisticas: EstadisticasAhorro;
+  formatCurrency: (amount: number) => string;
+}
+
+function ResumenAhorroTab({ estadisticas, formatCurrency }: ResumenAhorroTabProps) {
   return (
     <div className="grid lg:grid-cols-3 gap-6">
       {/* Tarjetas principales */}
@@ -571,10 +563,21 @@ function ResumenAhorroTab({ estadisticas, formatCurrency }: any) {
   )
 }
 
+// ✅ CORREGIDO: Definí interfaz para props
+interface MovimientosTabProps {
+  movimientos: MovimientoAhorro[];
+  onEdit?: (movimiento: MovimientoAhorro) => void;
+  onDelete?: (id: string) => void;
+  formatCurrency: (amount: number) => string;
+  getTipoIcon: (tipo: string) => JSX.Element;
+  getTipoColor: (tipo: string) => string;
+  getTipoBgColor: (tipo: string) => string;
+}
+
 function MovimientosTab({ 
   movimientos, onEdit, onDelete, formatCurrency, 
   getTipoIcon, getTipoColor, getTipoBgColor 
-}: any) {
+}: MovimientosTabProps) {
   return (
     <div className="space-y-6">
       <div>

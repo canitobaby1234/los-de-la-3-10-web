@@ -1,13 +1,13 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { useState, useEffect, useCallback } from 'react'
+import { useParams, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { 
   FaArrowLeft, FaEdit, FaTrash, FaCalendarAlt, FaMapMarkerAlt, FaUser, FaDollarSign, 
-  FaFileContract, FaPlus, FaMinus, FaChartLine, FaPiggyBank, FaMoneyBillWave, 
-  FaUsers, FaUndo, FaExclamationTriangle, FaCheckCircle, FaClock, FaTimes,
+  FaFileContract, FaPlus, FaMinus, FaChartLine, FaMoneyBillWave, 
+  FaUsers, FaUndo, FaExclamationTriangle, FaCheckCircle, FaTimes,
   FaReceipt, FaLightbulb, FaTruck, FaTools, FaWarehouse, FaShoppingCart
 } from 'react-icons/fa'
 
@@ -61,7 +61,6 @@ interface RepartoLote {
 
 export default function EventoDetallePage() {
   const params = useParams()
-  const router = useRouter()
   const searchParams = useSearchParams()
   const { miembro } = useAuth()
   
@@ -80,26 +79,20 @@ export default function EventoDetallePage() {
   const [repartoLoading, setRepartoLoading] = useState(false)
 
   const [gastoForm, setGastoForm] = useState({
-    categoria: 'transporte' as const,
+    categoria: 'transporte',
     monto: '',
     notas: '',
     fecha: new Date().toISOString().split('T')[0]
   })
 
   const [ingresoForm, setIngresoForm] = useState({
-    categoria: 'renta_audio' as const,
+    categoria: 'renta_audio',
     monto: '',
     notas: '',
     fecha: new Date().toISOString().split('T')[0]
   })
 
-  useEffect(() => {
-    if (params.id && miembro?.estado === 'activo') {
-      loadEventoCompleto()
-    }
-  }, [params.id, miembro])
-
-  const loadEventoCompleto = async () => {
+  const loadEventoCompleto = useCallback(async () => {
     try {
       // Cargar evento con balance
       const { data: eventoData, error: eventoError } = await supabase
@@ -171,13 +164,18 @@ export default function EventoDetallePage() {
 
       setRepartos(repartosData || [])
 
-    } catch (error) {
-      console.error('Error loading evento:', error)
+    } catch {
       setError('Error al cargar los datos del evento')
     } finally {
       setLoading(false)
     }
-  }
+  }, [params.id])
+
+  useEffect(() => {
+    if (params.id && miembro?.estado === 'activo') {
+      loadEventoCompleto()
+    }
+  }, [params.id, miembro, loadEventoCompleto])
 
   const handleAddGasto = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -211,8 +209,7 @@ export default function EventoDetallePage() {
       })
       loadEventoCompleto()
 
-    } catch (error) {
-      console.error('Error adding gasto:', error)
+    } catch {
       setError('Error al agregar gasto')
     }
   }
@@ -249,8 +246,7 @@ export default function EventoDetallePage() {
       })
       loadEventoCompleto()
 
-    } catch (error) {
-      console.error('Error adding ingreso:', error)
+    } catch {
       setError('Error al agregar ingreso')
     }
   }
@@ -271,7 +267,7 @@ export default function EventoDetallePage() {
     setError('')
 
     try {
-      const { data, error } = await supabase.rpc('cerrar_y_repartir_evento', {
+      const { error } = await supabase.rpc('cerrar_y_repartir_evento', {
         p_evento_id: params.id,
         p_omitir_ahorro: false, // Por defecto aplicar 10% de ahorro
         p_ahorro_pct: 0.10
@@ -287,8 +283,7 @@ export default function EventoDetallePage() {
       setSuccess('¡Evento cerrado y dinero repartido exitosamente!')
       loadEventoCompleto()
 
-    } catch (error) {
-      console.error('Error repartiendo dinero:', error)
+    } catch {
       setError('Error inesperado al repartir dinero')
     } finally {
       setRepartoLoading(false)
@@ -298,7 +293,7 @@ export default function EventoDetallePage() {
   const handleCancelarReparto = async (loteId: string) => {
     const confirmar = confirm(
       '¿Estás seguro de cancelar este reparto?\n\n' +
-      'Esto revertirá todos los repartos del lote y volverá el evento a estado "confirmado".'
+      'Esto revertirá todos los repartos del lote y volverá el evento a estado &quot;confirmado&quot;.'
     )
 
     if (!confirmar) return
@@ -317,8 +312,7 @@ export default function EventoDetallePage() {
       setSuccess('Reparto cancelado exitosamente')
       loadEventoCompleto()
 
-    } catch (error) {
-      console.error('Error cancelando reparto:', error)
+    } catch {
       setError('Error inesperado al cancelar reparto')
     }
   }
@@ -339,7 +333,7 @@ export default function EventoDetallePage() {
 
       setSuccess('Gasto eliminado')
       loadEventoCompleto()
-    } catch (error) {
+    } catch {
       setError('Error al eliminar gasto')
     }
   }
@@ -360,7 +354,7 @@ export default function EventoDetallePage() {
 
       setSuccess('Ingreso eliminado')
       loadEventoCompleto()
-    } catch (error) {
+    } catch {
       setError('Error al eliminar ingreso')
     }
   }
@@ -382,7 +376,7 @@ export default function EventoDetallePage() {
   }
 
   const getCategoriaIcon = (categoria: string) => {
-    const iconMap: Record<string, any> = {
+    const iconMap: Record<string, React.ComponentType> = {
       transporte: FaTruck,
       chalan: FaUser,
       renta_equipo: FaTools,
@@ -474,7 +468,7 @@ export default function EventoDetallePage() {
           
           <Link
             href={`/admin/eventos/${evento.id}/editar`}
-            className="inline-flex items-center bg-amber-600 hover:bg-amber-700 text-white px-4 py-3 rounded-lg font-medium transition-colors"
+            className="inline-flex items-center bg-amber-600 hover:bg-amber-700 text-white px-4 py-3 rounded-lg font-medium transition-colores"
           >
             <FaEdit className="mr-2" />
             Editar
@@ -569,7 +563,11 @@ export default function EventoDetallePage() {
   )
 }
 
-function ResumenTab({ evento }: { evento: EventoCompleto }) {
+interface ResumenTabProps {
+  evento: EventoCompleto
+}
+
+function ResumenTab({ evento }: ResumenTabProps) {
   const getEstadoColor = (estado: string) => {
     switch (estado) {
       case 'completado': return 'bg-green-100 text-green-800 border-green-200'
@@ -720,7 +718,7 @@ function ResumenTab({ evento }: { evento: EventoCompleto }) {
               <ul className="text-sm text-amber-600 space-y-1 ml-4">
                 <li>• Registra todos los gastos</li>
                 <li>• Agrega ingresos extras si hay</li>
-                <li>• Usa "Repartir Dinero" para cerrar</li>
+                <li>• Usa &quot;Repartir Dinero&quot; para cerrar</li>
               </ul>
             </div>
           </div>
@@ -761,10 +759,32 @@ function ResumenTab({ evento }: { evento: EventoCompleto }) {
   )
 }
 
+interface GastosTabProps {
+  gastos: Gasto[]
+  showForm: boolean
+  setShowForm: (show: boolean) => void
+  gastoForm: {
+    categoria: string
+    monto: string
+    notas: string
+    fecha: string
+  }
+  setGastoForm: React.Dispatch<React.SetStateAction<{
+    categoria: string
+    monto: string
+    notas: string
+    fecha: string
+  }>>
+  onSubmit: (e: React.FormEvent) => Promise<void>
+  onDelete: (id: string) => Promise<void>
+  formatCurrency: (amount: number) => string
+  getCategoriaIcon: (categoria: string) => React.ReactElement
+}
+
 function GastosTab({ 
   gastos, showForm, setShowForm, gastoForm, setGastoForm, 
   onSubmit, onDelete, formatCurrency, getCategoriaIcon 
-}: any) {
+}: GastosTabProps) {
   
   const categoriasGastos = [
     { value: 'transporte', label: 'Transporte' },
@@ -783,7 +803,7 @@ function GastosTab({
           <h2 className="text-2xl font-bold text-slate-700">Gastos del Evento</h2>
           <p className="text-slate-600">
             Total en gastos: <span className="font-bold text-red-600">
-              {formatCurrency(gastos.reduce((sum: number, g: any) => sum + g.monto, 0))}
+              {formatCurrency(gastos.reduce((sum, g) => sum + g.monto, 0))}
             </span>
           </p>
         </div>
@@ -877,7 +897,7 @@ function GastosTab({
         </div>
       ) : (
         <div className="grid gap-4">
-          {gastos.map((gasto: any) => (
+          {gastos.map((gasto) => (
             <div key={gasto.id} className="bg-white/80 backdrop-blur-sm rounded-lg p-4 shadow border border-red-200/50 flex items-center justify-between">
               <div className="flex items-center space-x-4">
                 <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center text-red-600">
@@ -912,10 +932,32 @@ function GastosTab({
   )
 }
 
+interface IngresosTabProps {
+  ingresos: IngresoExtra[]
+  showForm: boolean
+  setShowForm: (show: boolean) => void
+  ingresoForm: {
+    categoria: string
+    monto: string
+    notas: string
+    fecha: string
+  }
+  setIngresoForm: React.Dispatch<React.SetStateAction<{
+    categoria: string
+    monto: string
+    notas: string
+    fecha: string
+  }>>
+  onSubmit: (e: React.FormEvent) => Promise<void>
+  onDelete: (id: string) => Promise<void>
+  formatCurrency: (amount: number) => string
+  getCategoriaIcon: (categoria: string) => React.ReactElement
+}
+
 function IngresosTab({ 
   ingresos, showForm, setShowForm, ingresoForm, setIngresoForm, 
   onSubmit, onDelete, formatCurrency, getCategoriaIcon 
-}: any) {
+}: IngresosTabProps) {
   
   const categoriasIngresos = [
     { value: 'renta_audio', label: 'Renta de audio' },
@@ -931,13 +973,13 @@ function IngresosTab({
           <h2 className="text-2xl font-bold text-slate-700">Ingresos Extras</h2>
           <p className="text-slate-600">
             Total ingresos extras: <span className="font-bold text-green-600">
-              {formatCurrency(ingresos.reduce((sum: number, i: any) => sum + i.monto, 0))}
+              {formatCurrency(ingresos.reduce((sum, i) => sum + i.monto, 0))}
             </span>
           </p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="inline-flex items-center bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+          className="inline-flex items-center bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colores"
         >
           <FaPlus className="mr-2" />
           {showForm ? 'Cancelar' : 'Agregar Ingreso'}
@@ -999,14 +1041,14 @@ function IngresosTab({
           <div className="flex gap-4 mt-4">
             <button
               type="submit"
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colores"
             >
               Guardar Ingreso
             </button>
             <button
               type="button"
               onClick={() => setShowForm(false)}
-              className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+              className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colores"
             >
               Cancelar
             </button>
@@ -1025,7 +1067,7 @@ function IngresosTab({
         </div>
       ) : (
         <div className="grid gap-4">
-          {ingresos.map((ingreso: any) => (
+          {ingresos.map((ingreso) => (
             <div key={ingreso.id} className="bg-white/80 backdrop-blur-sm rounded-lg p-4 shadow border border-green-200/50 flex items-center justify-between">
               <div className="flex items-center space-x-4">
                 <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center text-green-600">
@@ -1060,7 +1102,13 @@ function IngresosTab({
   )
 }
 
-function RepartosTab({ repartos, onCancelarReparto, formatCurrency }: any) {
+interface RepartosTabProps {
+  repartos: RepartoLote[]
+  onCancelarReparto: (loteId: string) => Promise<void>
+  formatCurrency: (amount: number) => string
+}
+
+function RepartosTab({ repartos, onCancelarReparto, formatCurrency }: RepartosTabProps) {
   return (
     <div className="space-y-6">
       <div>
@@ -1075,12 +1123,12 @@ function RepartosTab({ repartos, onCancelarReparto, formatCurrency }: any) {
           </div>
           <h3 className="text-lg font-bold text-slate-700 mb-2">No hay repartos realizados</h3>
           <p className="text-slate-600">
-            Usa el botón "Repartir Dinero" en la parte superior para cerrar el evento y distribuir las ganancias
+            Usa el botón &quot;Repartir Dinero&quot; en la parte superior para cerrar el evento y distribuir las ganancias
           </p>
         </div>
       ) : (
         <div className="space-y-6">
-          {repartos.map((lote: any) => (
+          {repartos.map((lote) => (
             <div key={lote.id} className="bg-white/80 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-purple-200/50">
               <div className="flex justify-between items-center mb-4">
                 <div>
@@ -1102,7 +1150,7 @@ function RepartosTab({ repartos, onCancelarReparto, formatCurrency }: any) {
                   {lote.estado === 'aplicado' && (
                     <button
                       onClick={() => onCancelarReparto(lote.id)}
-                      className="inline-flex items-center bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors"
+                      className="inline-flex items-center bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colores"
                     >
                       <FaUndo className="mr-1" />
                       Cancelar
@@ -1112,7 +1160,7 @@ function RepartosTab({ repartos, onCancelarReparto, formatCurrency }: any) {
               </div>
 
               <div className="grid gap-3">
-                {lote.repartos?.map((reparto: any) => (
+                {lote.repartos?.map((reparto) => (
                   <div key={reparto.id} className="flex justify-between items-center p-3 bg-purple-50 rounded-lg">
                     <div className="flex items-center">
                       <div className="w-8 h-8 bg-purple-200 rounded-full flex items-center justify-center mr-3">
@@ -1133,7 +1181,7 @@ function RepartosTab({ repartos, onCancelarReparto, formatCurrency }: any) {
                 <div className="flex justify-between items-center">
                   <span className="font-bold text-slate-700">Total repartido:</span>
                   <span className="font-bold text-lg text-purple-600">
-                    {formatCurrency(lote.repartos?.reduce((sum: number, r: any) => sum + r.monto, 0) || 0)}
+                    {formatCurrency(lote.repartos?.reduce((sum, r) => sum + r.monto, 0) || 0)}
                   </span>
                 </div>
               </div>

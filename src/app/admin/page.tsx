@@ -5,13 +5,23 @@ import { supabase } from '@/lib/supabase'
 import { FaCalendarAlt, FaPiggyBank, FaDollarSign, FaChartLine, FaClock, FaCheckCircle, FaUsers, FaPlus } from 'react-icons/fa'
 import Link from 'next/link'
 
+interface Evento {
+  id: string
+  lugar: string
+  fecha: string
+  cliente: string | null
+  total: number
+  anticipo_recibido: number
+  estado: 'tentativo' | 'confirmado' | 'completado'
+}
+
 interface DashboardStats {
   totalEventos: number
   eventosPendientes: number
   eventosCompletados: number
   totalIngresos: number
   saldoAhorro: number
-  proximoEvento: any
+  proximoEvento: Evento | null
 }
 
 export default function AdminDashboard() {
