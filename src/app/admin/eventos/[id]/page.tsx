@@ -92,44 +92,70 @@ export default function EventoDetallePage() {
     fecha: new Date().toISOString().split('T')[0]
   })
 
+// Reemplaza SOLO la función loadEventoCompleto con esta versión:
+
   const loadEventoCompleto = useCallback(async () => {
     try {
-      // Cargar evento con balance
+      console.log('Cargando evento completo:', params.id) // Debug
+      
+      // Cargar evento directamente sin vista
       const { data: eventoData, error: eventoError } = await supabase
-        .from('v_evento_balance')
-        .select(`
-          *,
-          eventos!inner(
-            id, fecha, lugar, cliente, total, anticipo_recibido, 
-            contrato_firmado, estado, creado_por
-          )
-        `)
+        .from('eventos')
+        .select('*')
         .eq('id', params.id)
         .single()
 
       if (eventoError) {
+        console.error('Error loading evento:', eventoError)
         setError('Error al cargar el evento')
         setLoading(false)
         return
       }
 
+      if (!eventoData) {
+        console.log('Evento no encontrado')
+        setLoading(false)
+        return
+      }
+
+      console.log('Evento base encontrado:', eventoData) // Debug
+
+      // Cargar datos relacionados en paralelo
+      const [gastosResult, ingresosResult, ahorroResult] = await Promise.all([
+        supabase.from('gastos').select('monto').eq('evento_id', params.id),
+        supabase.from('ingresos_extras').select('monto').eq('evento_id', params.id),
+        supabase.from('ahorro_ledger').select('monto, tipo').eq('evento_id', params.id)
+      ])
+
+      // Calcular totales
+      const gastos_totales = gastosResult.data?.reduce((sum, g) => sum + Number(g.monto), 0) || 0
+      const ingresos_extras = ingresosResult.data?.reduce((sum, i) => sum + Number(i.monto), 0) || 0
+      const ahorro_aportado = ahorroResult.data?.reduce((sum, a) => {
+        return sum + (a.tipo === 'aporte' ? Number(a.monto) : -Number(a.monto))
+      }, 0) || 0
+
+      const neto_evento = Number(eventoData.total) + ingresos_extras - gastos_totales - ahorro_aportado
+
+      console.log('Cálculos:', { gastos_totales, ingresos_extras, ahorro_aportado, neto_evento }) // Debug
+
+      // Crear objeto evento completo
       setEvento({
         id: eventoData.id,
         fecha: eventoData.fecha,
         lugar: eventoData.lugar,
-        cliente: eventoData.eventos.cliente,
-        total: eventoData.total,
-        anticipo_recibido: eventoData.eventos.anticipo_recibido,
-        contrato_firmado: eventoData.eventos.contrato_firmado,
-        estado: eventoData.eventos.estado,
-        creado_por: eventoData.eventos.creado_por,
-        gastos_totales: eventoData.gastos_totales || 0,
-        ahorro_aportado: eventoData.ahorro_aportado || 0,
-        ingresos_extras: eventoData.ingresos_extras || 0,
-        neto_evento: eventoData.neto_evento || 0
+        cliente: eventoData.cliente || '',
+        total: Number(eventoData.total),
+        anticipo_recibido: Number(eventoData.anticipo_recibido),
+        contrato_firmado: eventoData.contrato_firmado,
+        estado: eventoData.estado,
+        creado_por: eventoData.creado_por,
+        gastos_totales,
+        ahorro_aportado,
+        ingresos_extras,
+        neto_evento
       })
 
-      // Cargar gastos
+      // Cargar gastos detallados
       const { data: gastosData } = await supabase
         .from('gastos')
         .select('*')
@@ -138,7 +164,7 @@ export default function EventoDetallePage() {
 
       setGastos(gastosData || [])
 
-      // Cargar ingresos extras
+      // Cargar ingresos extras detallados
       const { data: ingresosData } = await supabase
         .from('ingresos_extras')
         .select('*')
@@ -164,7 +190,10 @@ export default function EventoDetallePage() {
 
       setRepartos(repartosData || [])
 
-    } catch {
+      console.log('Datos cargados exitosamente') // Debug
+
+    } catch (error) {
+      console.error('Error general cargando evento:', error)
       setError('Error al cargar los datos del evento')
     } finally {
       setLoading(false)
