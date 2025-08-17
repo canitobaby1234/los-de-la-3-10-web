@@ -84,6 +84,12 @@ export default function EventoDetallePage() {
   tipo: 'porcentaje', // 'porcentaje' o 'cantidad'
   valor: 10 // 10% o cantidad en pesos
 })
+const [gastosConfig, setGastosConfig] = useState({
+  tuvoChalán: false,
+  montoChalán: 0,
+  tuvoTransporte: false,
+  montoTransporte: 0
+})
 
 
   const [gastoForm, setGastoForm] = useState({
@@ -293,12 +299,74 @@ export default function EventoDetallePage() {
     setShowAhorroModal(true)
   }
 
-const confirmarReparto = async () => {
+  const calcularNetoFinal = () => {
+  if (!evento) return 0
+  
+  let netoAjustado = evento.neto_evento
+  
+  // Restar gastos nuevos que no estén ya registrados
+  if (gastosConfig.tuvoChalán && gastosConfig.montoChalán > 0 && !gastos.find(g => g.categoria === 'chalan')) {
+    netoAjustado -= gastosConfig.montoChalán
+  }
+  
+  if (gastosConfig.tuvoTransporte && gastosConfig.montoTransporte > 0 && !gastos.find(g => g.categoria === 'transporte')) {
+    netoAjustado -= gastosConfig.montoTransporte
+  }
+  
+  return netoAjustado
+}
+
+const calcularMontoFinalReparto = () => {
+  const netoFinal = calcularNetoFinal()
+  const ahorro = ahorroConfig.omitir 
+    ? 0
+    : ahorroConfig.tipo === 'porcentaje'
+      ? netoFinal * (ahorroConfig.valor / 100)
+      : ahorroConfig.valor
+  
+  return netoFinal - ahorro
+}
+const confirmarRepartoCompleto = async () => {
   setShowAhorroModal(false)
   setRepartoLoading(true)
   setError('')
 
   try {
+    if (!miembro?.id) {
+      setError('Error: Usuario no identificado')
+      setRepartoLoading(false)
+      return
+    }
+
+    // Primero registrar gastos nuevos si los hay
+    if (gastosConfig.tuvoChalán && gastosConfig.montoChalán > 0 && !gastos.find(g => g.categoria === 'chalan')) {
+      await supabase.from('gastos').insert([{
+        evento_id: params.id,
+        categoria: 'chalan',
+        monto: gastosConfig.montoChalán,
+        notas: 'Pago de ayudante/chalán',
+        fecha: new Date().toISOString().split('T')[0],
+        creado_por: miembro.id
+      }])
+    }
+    
+    if (gastosConfig.tuvoTransporte && gastosConfig.montoTransporte > 0 && !gastos.find(g => g.categoria === 'transporte')) {
+      await supabase.from('gastos').insert([{
+        evento_id: params.id,
+        categoria: 'transporte',
+        monto: gastosConfig.montoTransporte,
+        notas: 'Gasto de gasolina/transporte',
+        fecha: new Date().toISOString().split('T')[0],
+        creado_por: miembro.id
+      }])
+    }
+
+    // Resto del código igual...
+
+    // Esperar un poco para que se procesen los gastos
+    await new Promise(resolve => setTimeout(resolve, 500))
+
+    // Ahora hacer el reparto
     interface ParametrosReparto {
       p_evento_id: string
       p_omitir_ahorro: boolean
@@ -314,7 +382,7 @@ const confirmarReparto = async () => {
     if (!ahorroConfig.omitir) {
       parametros.p_ahorro_tipo = ahorroConfig.tipo
       if (ahorroConfig.tipo === 'porcentaje') {
-        parametros.p_ahorro_valor = ahorroConfig.valor / 100 // Convertir a decimal
+        parametros.p_ahorro_valor = ahorroConfig.valor / 100
       } else {
         parametros.p_ahorro_valor = ahorroConfig.valor
       }
@@ -337,8 +405,8 @@ const confirmarReparto = async () => {
   } finally {
     setRepartoLoading(false)
   }
+  
 }
-
   const handleCancelarReparto = async (loteId: string) => {
     const confirmar = confirm(
       '¿Estás seguro de cancelar este reparto?\n\n' +
@@ -546,115 +614,266 @@ const confirmarReparto = async () => {
         </div>
       )}
 
-      {/* Modal de configuración de ahorro */}
-      {showAhorroModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-slate-700 mb-4">Configurar Reparto</h3>
-            
-            <div className="space-y-4">
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-800">
-                  <strong>Neto disponible:</strong> {formatCurrency(evento.neto_evento)}
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="ahorro"
-                    checked={!ahorroConfig.omitir && ahorroConfig.tipo === 'porcentaje'}
-                    onChange={() => setAhorroConfig({...ahorroConfig, omitir: false, tipo: 'porcentaje'})}
-                    className="mr-3"
-                  />
-                  <span className="font-medium">Aplicar ahorro por porcentaje</span>
-                </label>
-                
-                {!ahorroConfig.omitir && ahorroConfig.tipo === 'porcentaje' && (
-                  <div className="ml-6">
-                    <input
-                      type="number"
-                      min="1"
-                      max="50"
-                      value={ahorroConfig.valor}
-                      onChange={(e) => setAhorroConfig({...ahorroConfig, valor: Number(e.target.value)})}
-                      className="w-20 px-2 py-1 border border-gray-300 rounded mr-2"
-                    />
-                    <span className="text-sm text-gray-600">
-                      % = {formatCurrency(evento.neto_evento * (ahorroConfig.valor / 100))}
-                    </span>
-                  </div>
-                )}
-
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="ahorro"
-                    checked={!ahorroConfig.omitir && ahorroConfig.tipo === 'cantidad'}
-                    onChange={() => setAhorroConfig({...ahorroConfig, omitir: false, tipo: 'cantidad'})}
-                    className="mr-3"
-                  />
-                  <span className="font-medium">Aplicar ahorro por cantidad fija</span>
-                </label>
-                
-                {!ahorroConfig.omitir && ahorroConfig.tipo === 'cantidad' && (
-                  <div className="ml-6">
-                    <span className="text-sm text-gray-600 mr-2">$</span>
-                    <input
-                      type="number"
-                      min="1"
-                      max={evento.neto_evento}
-                      value={ahorroConfig.valor}
-                      onChange={(e) => setAhorroConfig({...ahorroConfig, valor: Number(e.target.value)})}
-                      className="w-32 px-2 py-1 border border-gray-300 rounded"
-                    />
-                  </div>
-                )}
-
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="ahorro"
-                    checked={ahorroConfig.omitir}
-                    onChange={() => setAhorroConfig({...ahorroConfig, omitir: true})}
-                    className="mr-3"
-                  />
-                  <span className="font-medium">No aplicar ahorro</span>
-                </label>
-              </div>
-
-              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                <p className="text-sm text-green-800">
-                  <strong>A repartir:</strong> {
-                    ahorroConfig.omitir 
-                      ? formatCurrency(evento.neto_evento)
-                      : ahorroConfig.tipo === 'porcentaje'
-                        ? formatCurrency(evento.neto_evento - (evento.neto_evento * (ahorroConfig.valor / 100)))
-                        : formatCurrency(evento.neto_evento - ahorroConfig.valor)
-                  }
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={confirmarReparto}
-                disabled={repartoLoading}
-                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-              >
-                {repartoLoading ? 'Repartiendo...' : 'Confirmar Reparto'}
-              </button>
-              <button
-                onClick={() => setShowAhorroModal(false)}
-                className="flex-1 bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-              >
-                Cancelar
-              </button>
+      {/* Modal de configuración de reparto con gastos específicos */}
+{showAhorroModal && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+      <h3 className="text-xl font-bold text-slate-700 mb-4">Configurar Reparto</h3>
+      
+      <div className="space-y-6">
+        {/* Resumen del evento */}
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <h4 className="font-bold text-blue-800 mb-2">💰 Resumen Financiero</h4>
+          <div className="text-sm text-blue-700 space-y-1">
+            <p><strong>Total del evento:</strong> {formatCurrency(evento.total)}</p>
+            <p><strong>Gastos registrados:</strong> {formatCurrency(evento.gastos_totales)}</p>
+            <p><strong>Ingresos extras:</strong> {formatCurrency(evento.ingresos_extras)}</p>
+            <div className="pt-2 border-t border-blue-300">
+              <p><strong>Neto disponible:</strong> {formatCurrency(evento.neto_evento)}</p>
             </div>
           </div>
         </div>
-      )}
+
+        {/* Verificación de gastos principales */}
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+          <h4 className="font-bold text-amber-800 mb-3">🔍 Verificación de Gastos</h4>
+          <div className="space-y-3 text-sm">
+            
+            {/* Pregunta sobre ayudante */}
+            <div className="bg-white rounded-lg p-3 border border-amber-200">
+              <div className="flex justify-between items-center mb-2">
+                <span className="font-medium text-amber-800">¿Hubo ayudante/chalán?</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setGastosConfig({...gastosConfig, tuvoChalán: true})}
+                    className={`px-3 py-1 rounded text-xs ${gastosConfig.tuvoChalán 
+                      ? 'bg-amber-600 text-white' 
+                      : 'bg-gray-200 text-gray-600'}`}
+                  >
+                    Sí
+                  </button>
+                  <button
+                    onClick={() => setGastosConfig({...gastosConfig, tuvoChalán: false, montoChalán: 0})}
+                    className={`px-3 py-1 rounded text-xs ${!gastosConfig.tuvoChalán 
+                      ? 'bg-amber-600 text-white' 
+                      : 'bg-gray-200 text-gray-600'}`}
+                  >
+                    No
+                  </button>
+                </div>
+              </div>
+              
+              {gastosConfig.tuvoChalán && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-amber-700">Pago:</span>
+                  <span className="text-xs">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={gastosConfig.montoChalán}
+                    onChange={(e) => setGastosConfig({...gastosConfig, montoChalán: Number(e.target.value)})}
+                    className="w-24 px-2 py-1 border border-amber-300 rounded text-xs"
+                    placeholder="0"
+                  />
+                </div>
+              )}
+              
+              <div className="mt-2 text-xs text-amber-600">
+                {gastos.find(g => g.categoria === 'chalan') 
+                  ? `✅ Ya registrado: ${formatCurrency(gastos.find(g => g.categoria === 'chalan')?.monto || 0)}`
+                  : '⚠️ Aún no registrado en gastos'
+                }
+              </div>
+            </div>
+
+            {/* Pregunta sobre transporte/gasolina */}
+            <div className="bg-white rounded-lg p-3 border border-amber-200">
+              <div className="flex justify-between items-center mb-2">
+                <span className="font-medium text-amber-800">¿Hubo gasto de gasolina/transporte?</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setGastosConfig({...gastosConfig, tuvoTransporte: true})}
+                    className={`px-3 py-1 rounded text-xs ${gastosConfig.tuvoTransporte 
+                      ? 'bg-amber-600 text-white' 
+                      : 'bg-gray-200 text-gray-600'}`}
+                  >
+                    Sí
+                  </button>
+                  <button
+                    onClick={() => setGastosConfig({...gastosConfig, tuvoTransporte: false, montoTransporte: 0})}
+                    className={`px-3 py-1 rounded text-xs ${!gastosConfig.tuvoTransporte 
+                      ? 'bg-amber-600 text-white' 
+                      : 'bg-gray-200 text-gray-600'}`}
+                  >
+                    No
+                  </button>
+                </div>
+              </div>
+              
+              {gastosConfig.tuvoTransporte && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-amber-700">Monto:</span>
+                  <span className="text-xs">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={gastosConfig.montoTransporte}
+                    onChange={(e) => setGastosConfig({...gastosConfig, montoTransporte: Number(e.target.value)})}
+                    className="w-24 px-2 py-1 border border-amber-300 rounded text-xs"
+                    placeholder="0"
+                  />
+                </div>
+              )}
+              
+              <div className="mt-2 text-xs text-amber-600">
+                {gastos.find(g => g.categoria === 'transporte') 
+                  ? `✅ Ya registrado: ${formatCurrency(gastos.find(g => g.categoria === 'transporte')?.monto || 0)}`
+                  : '⚠️ Aún no registrado en gastos'
+                }
+              </div>
+            </div>
+
+            {/* Resumen de gastos nuevos */}
+            {(gastosConfig.tuvoChalán || gastosConfig.tuvoTransporte) && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                <p className="text-xs font-medium text-yellow-800 mb-1">📝 Gastos a registrar automáticamente:</p>
+                <div className="text-xs text-yellow-700 space-y-1">
+                  {gastosConfig.tuvoChalán && gastosConfig.montoChalán > 0 && !gastos.find(g => g.categoria === 'chalan') && (
+                    <p>• Chalán: {formatCurrency(gastosConfig.montoChalán)}</p>
+                  )}
+                  {gastosConfig.tuvoTransporte && gastosConfig.montoTransporte > 0 && !gastos.find(g => g.categoria === 'transporte') && (
+                    <p>• Transporte: {formatCurrency(gastosConfig.montoTransporte)}</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Configuración de ahorro */}
+        <div className="space-y-4">
+          <h4 className="font-bold text-slate-700">💰 Configuración de Ahorro</h4>
+          
+          <div className="space-y-3">
+            <label className="flex items-center">
+              <input
+                type="radio"
+                name="ahorro"
+                checked={!ahorroConfig.omitir && ahorroConfig.tipo === 'porcentaje'}
+                onChange={() => setAhorroConfig({...ahorroConfig, omitir: false, tipo: 'porcentaje'})}
+                className="mr-3"
+              />
+              <span className="font-medium">Aplicar ahorro por porcentaje</span>
+            </label>
+            
+            {!ahorroConfig.omitir && ahorroConfig.tipo === 'porcentaje' && (
+              <div className="ml-6">
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  value={ahorroConfig.valor}
+                  onChange={(e) => setAhorroConfig({...ahorroConfig, valor: Number(e.target.value)})}
+                  className="w-20 px-2 py-1 border border-gray-300 rounded mr-2"
+                />
+                <span className="text-sm text-gray-600">
+                  % = {formatCurrency(calcularNetoFinal() * (ahorroConfig.valor / 100))}
+                </span>
+              </div>
+            )}
+
+            <label className="flex items-center">
+              <input
+                type="radio"
+                name="ahorro"
+                checked={!ahorroConfig.omitir && ahorroConfig.tipo === 'cantidad'}
+                onChange={() => setAhorroConfig({...ahorroConfig, omitir: false, tipo: 'cantidad'})}
+                className="mr-3"
+              />
+              <span className="font-medium">Aplicar ahorro por cantidad fija</span>
+            </label>
+            
+            {!ahorroConfig.omitir && ahorroConfig.tipo === 'cantidad' && (
+              <div className="ml-6">
+                <span className="text-sm text-gray-600 mr-2">$</span>
+                <input
+                  type="number"
+                  min="1"
+                  max={calcularNetoFinal()}
+                  value={ahorroConfig.valor}
+                  onChange={(e) => setAhorroConfig({...ahorroConfig, valor: Number(e.target.value)})}
+                  className="w-32 px-2 py-1 border border-gray-300 rounded"
+                />
+              </div>
+            )}
+
+            <label className="flex items-center">
+              <input
+                type="radio"
+                name="ahorro"
+                checked={ahorroConfig.omitir}
+                onChange={() => setAhorroConfig({...ahorroConfig, omitir: true})}
+                className="mr-3"
+              />
+              <span className="font-medium">No aplicar ahorro</span>
+            </label>
+          </div>
+        </div>
+
+        {/* Resultado final */}
+        <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+          <h4 className="font-bold text-green-800 mb-2">🎯 Resultado del Reparto</h4>
+          <div className="text-sm text-green-700 space-y-1">
+            <div className="flex justify-between">
+              <span>Neto después de gastos nuevos:</span>
+              <span className="font-medium">{formatCurrency(calcularNetoFinal())}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Ahorro a aplicar:</span>
+              <span className="font-medium">
+                -{formatCurrency(ahorroConfig.omitir 
+                  ? 0
+                  : ahorroConfig.tipo === 'porcentaje'
+                    ? calcularNetoFinal() * (ahorroConfig.valor / 100)
+                    : ahorroConfig.valor
+                )}
+              </span>
+            </div>
+            <div className="border-t border-green-300 pt-2">
+              <div className="flex justify-between font-bold">
+                <span>Total a repartir:</span>
+                <span>{formatCurrency(calcularMontoFinalReparto())}</span>
+              </div>
+              <div className="flex justify-between text-lg font-bold text-green-800">
+                <span>Entre 3 miembros:</span>
+                <span>{formatCurrency(calcularMontoFinalReparto() / 3)} c/u</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-3 mt-6">
+        <button
+          onClick={confirmarRepartoCompleto}
+          disabled={repartoLoading}
+          className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+        >
+          {repartoLoading ? 'Repartiendo...' : 'Confirmar Reparto'}
+        </button>
+        <button
+          onClick={() => setShowAhorroModal(false)}
+          className="flex-1 bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+
+
 
 
       {/* Tabs */}
