@@ -77,6 +77,14 @@ export default function EventoDetallePage() {
   const [showGastoForm, setShowGastoForm] = useState(false)
   const [showIngresoForm, setShowIngresoForm] = useState(false)
   const [repartoLoading, setRepartoLoading] = useState(false)
+  const [showAhorroModal, setShowAhorroModal] = useState(false)
+  
+  const [ahorroConfig, setAhorroConfig] = useState({
+  omitir: false,
+  tipo: 'porcentaje', // 'porcentaje' o 'cantidad'
+  valor: 10 // 10% o cantidad en pesos
+})
+
 
   const [gastoForm, setGastoForm] = useState({
     categoria: 'transporte',
@@ -282,42 +290,54 @@ export default function EventoDetallePage() {
 
   const handleRepartirDinero = async () => {
     if (!evento || evento.estado === 'completado') return
-
-    const confirmar = confirm(
-      `¿Estás seguro de cerrar y repartir este evento?\n\n` +
-      `Neto a repartir: ${formatCurrency(evento.neto_evento)}\n` +
-      `Esto marcará el evento como completado y creará los repartos individuales.\n\n` +
-      `Esta acción se puede revertir si es necesario.`
-    )
-
-    if (!confirmar) return
-
-    setRepartoLoading(true)
-    setError('')
-
-    try {
-      const { error } = await supabase.rpc('cerrar_y_repartir_evento', {
-        p_evento_id: params.id,
-        p_omitir_ahorro: false, // Por defecto aplicar 10% de ahorro
-        p_ahorro_pct: 0.10
-      })
-
-      if (error) {
-        console.error('Error en reparto:', error)
-        setError('Error al repartir: ' + error.message)
-        setRepartoLoading(false)
-        return
-      }
-
-      setSuccess('¡Evento cerrado y dinero repartido exitosamente!')
-      loadEventoCompleto()
-
-    } catch {
-      setError('Error inesperado al repartir dinero')
-    } finally {
-      setRepartoLoading(false)
-    }
+    setShowAhorroModal(true)
   }
+
+const confirmarReparto = async () => {
+  setShowAhorroModal(false)
+  setRepartoLoading(true)
+  setError('')
+
+  try {
+    interface ParametrosReparto {
+      p_evento_id: string
+      p_omitir_ahorro: boolean
+      p_ahorro_tipo?: string
+      p_ahorro_valor?: number
+    }
+
+    const parametros: ParametrosReparto = {
+      p_evento_id: params.id as string,
+      p_omitir_ahorro: ahorroConfig.omitir
+    }
+
+    if (!ahorroConfig.omitir) {
+      parametros.p_ahorro_tipo = ahorroConfig.tipo
+      if (ahorroConfig.tipo === 'porcentaje') {
+        parametros.p_ahorro_valor = ahorroConfig.valor / 100 // Convertir a decimal
+      } else {
+        parametros.p_ahorro_valor = ahorroConfig.valor
+      }
+    }
+
+    const { error } = await supabase.rpc('cerrar_y_repartir_evento', parametros)
+
+    if (error) {
+      console.error('Error en reparto:', error)
+      setError('Error al repartir: ' + error.message)
+      setRepartoLoading(false)
+      return
+    }
+
+    setSuccess('¡Evento cerrado y dinero repartido exitosamente!')
+    loadEventoCompleto()
+
+  } catch {
+    setError('Error inesperado al repartir dinero')
+  } finally {
+    setRepartoLoading(false)
+  }
+}
 
   const handleCancelarReparto = async (loteId: string) => {
     const confirmar = confirm(
@@ -525,6 +545,117 @@ export default function EventoDetallePage() {
           </button>
         </div>
       )}
+
+      {/* Modal de configuración de ahorro */}
+      {showAhorroModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-bold text-slate-700 mb-4">Configurar Reparto</h3>
+            
+            <div className="space-y-4">
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Neto disponible:</strong> {formatCurrency(evento.neto_evento)}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="ahorro"
+                    checked={!ahorroConfig.omitir && ahorroConfig.tipo === 'porcentaje'}
+                    onChange={() => setAhorroConfig({...ahorroConfig, omitir: false, tipo: 'porcentaje'})}
+                    className="mr-3"
+                  />
+                  <span className="font-medium">Aplicar ahorro por porcentaje</span>
+                </label>
+                
+                {!ahorroConfig.omitir && ahorroConfig.tipo === 'porcentaje' && (
+                  <div className="ml-6">
+                    <input
+                      type="number"
+                      min="1"
+                      max="50"
+                      value={ahorroConfig.valor}
+                      onChange={(e) => setAhorroConfig({...ahorroConfig, valor: Number(e.target.value)})}
+                      className="w-20 px-2 py-1 border border-gray-300 rounded mr-2"
+                    />
+                    <span className="text-sm text-gray-600">
+                      % = {formatCurrency(evento.neto_evento * (ahorroConfig.valor / 100))}
+                    </span>
+                  </div>
+                )}
+
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="ahorro"
+                    checked={!ahorroConfig.omitir && ahorroConfig.tipo === 'cantidad'}
+                    onChange={() => setAhorroConfig({...ahorroConfig, omitir: false, tipo: 'cantidad'})}
+                    className="mr-3"
+                  />
+                  <span className="font-medium">Aplicar ahorro por cantidad fija</span>
+                </label>
+                
+                {!ahorroConfig.omitir && ahorroConfig.tipo === 'cantidad' && (
+                  <div className="ml-6">
+                    <span className="text-sm text-gray-600 mr-2">$</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max={evento.neto_evento}
+                      value={ahorroConfig.valor}
+                      onChange={(e) => setAhorroConfig({...ahorroConfig, valor: Number(e.target.value)})}
+                      className="w-32 px-2 py-1 border border-gray-300 rounded"
+                    />
+                  </div>
+                )}
+
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="ahorro"
+                    checked={ahorroConfig.omitir}
+                    onChange={() => setAhorroConfig({...ahorroConfig, omitir: true})}
+                    className="mr-3"
+                  />
+                  <span className="font-medium">No aplicar ahorro</span>
+                </label>
+              </div>
+
+              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm text-green-800">
+                  <strong>A repartir:</strong> {
+                    ahorroConfig.omitir 
+                      ? formatCurrency(evento.neto_evento)
+                      : ahorroConfig.tipo === 'porcentaje'
+                        ? formatCurrency(evento.neto_evento - (evento.neto_evento * (ahorroConfig.valor / 100)))
+                        : formatCurrency(evento.neto_evento - ahorroConfig.valor)
+                  }
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={confirmarReparto}
+                disabled={repartoLoading}
+                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+              >
+                {repartoLoading ? 'Repartiendo...' : 'Confirmar Reparto'}
+              </button>
+              <button
+                onClick={() => setShowAhorroModal(false)}
+                className="flex-1 bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* Tabs */}
       <div className="border-b border-blue-200">
